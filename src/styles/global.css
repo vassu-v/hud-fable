@@ -1,0 +1,414 @@
+/*
+ * hud-fable global styles.
+ *
+ * Design constraints from the input system (not aesthetic preferences):
+ *  - Dark theme, high contrast: doubles as projector-friendliness later.
+ *  - Interactive controls are BIG (>= 80px targets) with generous spacing —
+ *    the pointer has Wii-mote-class accuracy, not mouse-class.
+ *  - Three visual layers: ambient info (dense allowed) / interactive
+ *    controls (chunky) / cursor+feedback (always on top).
+ *  - Layout in viewport-relative units so nothing assumes a resolution.
+ */
+
+:root {
+  --bg: #0a0e14;
+  --panel: #111826;
+  --panel-raised: #182233;
+  --edge: #223047;
+  --text: #dce6f2;
+  --text-dim: #7d8ea6;
+  --accent: #37c8ff;
+  --accent-soft: rgba(55, 200, 255, 0.18);
+  --good: #43d97b;
+  --warn: #ffb347;
+  --bad: #ff5d73;
+  --radius: 14px;
+  font-size: clamp(12px, 1.1vw, 18px);
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+  /* The ray IS the pointer; the OS cursor only confuses. Dev panel opts back in. */
+  cursor: default;
+  user-select: none;
+}
+
+/* ---------------------------------------------------------------- layers */
+
+.hud-root {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: grid;
+  grid-template-columns: 1.1fr 1.6fr 1.1fr;
+  grid-template-rows: auto 1fr auto;
+  gap: 1.2vw;
+  padding: 1.4vw;
+}
+
+/* Cursor + feedback layer sits above everything and never captures input. */
+.cursor-layer {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1000;
+}
+
+/* -------------------------------------------------------------- ambient */
+
+.card {
+  background: var(--panel);
+  border: 1px solid var(--edge);
+  border-radius: var(--radius);
+  padding: 1.1em 1.3em;
+  min-width: 0;
+}
+
+.card h3 {
+  font-size: 0.72em;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  margin-bottom: 0.7em;
+  font-weight: 600;
+}
+
+.ambient {
+  /* Ambient layer: informational, never a ray target. */
+  pointer-events: none;
+}
+
+.big-number {
+  font-size: 2.6em;
+  font-weight: 200;
+  letter-spacing: 0.02em;
+  font-variant-numeric: tabular-nums;
+}
+
+.dim {
+  color: var(--text-dim);
+}
+
+/* ---------------------------------------------------------- interactive */
+
+/* Everything the ray can hit. Chunky by decree. */
+.interactive {
+  background: var(--panel-raised);
+  border: 2px solid var(--edge);
+  border-radius: var(--radius);
+  min-width: 5em;
+  min-height: 5em;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 0.4em;
+  position: relative;
+  transition:
+    border-color 120ms ease,
+    box-shadow 120ms ease,
+    transform 120ms ease;
+}
+
+/* HOVER: element highlighted. */
+.interactive.hovered {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 4px var(--accent-soft);
+}
+
+/* ARMED: charged, ready to accept commit. */
+.interactive.armed {
+  border-color: var(--accent);
+  box-shadow:
+    0 0 0 4px var(--accent-soft),
+    0 0 24px 2px var(--accent-soft);
+  transform: scale(1.02);
+}
+
+/* Dwell countdown ring — drawn as an SVG overlay inside the element. */
+.dwell-ring {
+  position: absolute;
+  top: 0.4em;
+  right: 0.4em;
+  width: 2em;
+  height: 2em;
+}
+.dwell-ring circle {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 3;
+  stroke-linecap: round;
+  transform: rotate(-90deg);
+  transform-origin: center;
+}
+.dwell-ring .track {
+  stroke: var(--edge);
+}
+
+/* ------------------------------------------------------------- cursor */
+
+.ray-cursor {
+  position: absolute;
+  width: 22px;
+  height: 22px;
+  margin: -11px 0 0 -11px; /* center on the position */
+  border-radius: 50%;
+  border: 3px solid var(--accent);
+  background: rgba(55, 200, 255, 0.25);
+  transition:
+    width 100ms ease,
+    height 100ms ease,
+    margin 100ms ease,
+    opacity 150ms ease,
+    border-color 100ms ease;
+  will-change: transform;
+}
+.ray-cursor.state-HOVER {
+  width: 34px;
+  height: 34px;
+  margin: -17px 0 0 -17px;
+}
+.ray-cursor.state-ARMED {
+  width: 34px;
+  height: 34px;
+  margin: -17px 0 0 -17px;
+  box-shadow: 0 0 18px 4px var(--accent-soft);
+}
+.ray-cursor.state-FROZEN {
+  border-color: var(--warn);
+}
+.ray-cursor.state-DRAGGING {
+  border-color: var(--good);
+}
+.ray-cursor.unstable {
+  opacity: 0.35;
+}
+.ray-cursor.hidden {
+  opacity: 0;
+}
+
+/* Lock glyph shown inside the cursor while FROZEN. */
+.cursor-glyph {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  color: var(--warn);
+}
+
+/* Edge arrow for off-screen pointing. */
+.offscreen-arrow {
+  position: absolute;
+  font-size: 26px;
+  color: var(--warn);
+  will-change: transform;
+}
+
+/* Drift marker: small persistent bright disc the camera watches (bottom-right). */
+.drift-marker {
+  position: fixed;
+  right: 0.6vw;
+  bottom: 1.2vh;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #ffffff;
+  z-index: 999;
+}
+
+/* -------------------------------------------------------------- banners */
+
+.banner {
+  position: fixed;
+  top: 1.5vh;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--panel-raised);
+  border: 1px solid var(--warn);
+  color: var(--warn);
+  border-radius: var(--radius);
+  padding: 0.7em 1.4em;
+  z-index: 1100;
+  font-size: 0.95em;
+}
+
+/* ------------------------------------------------------------ dev panel */
+
+.dev-panel {
+  position: fixed;
+  right: 1vw;
+  top: 1vh;
+  width: 300px;
+  max-height: 92vh;
+  overflow-y: auto;
+  background: rgba(13, 18, 28, 0.94);
+  border: 1px solid var(--edge);
+  border-radius: var(--radius);
+  padding: 1em;
+  z-index: 1200;
+  font-size: 12px;
+  cursor: auto;
+  user-select: text;
+}
+.dev-panel label {
+  display: block;
+  margin-top: 0.7em;
+  color: var(--text-dim);
+}
+.dev-panel input[type="range"] {
+  width: 100%;
+}
+.dev-panel .row {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5em;
+  align-items: center;
+}
+
+/* ---------------------------------------------------------- calibration */
+
+.calibration-screen {
+  position: fixed;
+  inset: 0;
+  background: #000;
+  z-index: 2000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 1.5em;
+}
+.calibration-marker {
+  position: fixed;
+  width: 9vmin;
+  height: 9vmin;
+  border-radius: 50%;
+  background: #fff;
+  transform: translate(-50%, -50%);
+}
+.calibration-panel {
+  background: var(--panel);
+  border: 1px solid var(--edge);
+  border-radius: var(--radius);
+  padding: 2em;
+  max-width: 34em;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 1em;
+  cursor: auto;
+}
+.calibration-panel button,
+.calibration-panel input,
+.calibration-panel select {
+  font-size: 1em;
+  padding: 0.6em 1.2em;
+  border-radius: 8px;
+  border: 1px solid var(--edge);
+  background: var(--panel-raised);
+  color: var(--text);
+  cursor: pointer;
+}
+.calibration-panel button.primary {
+  background: var(--accent);
+  color: #04121c;
+  font-weight: 600;
+}
+.camera-preview {
+  position: relative;
+  border: 1px solid var(--edge);
+  border-radius: 8px;
+  overflow: hidden;
+  max-width: 60vw;
+}
+.camera-preview canvas {
+  display: block;
+  width: 100%;
+}
+
+/* -------------------------------------------------------------- widgets */
+
+.toggle-state {
+  font-size: 1.6em;
+  font-weight: 600;
+}
+.toggle-state.on {
+  color: var(--good);
+}
+.toggle-state.off {
+  color: var(--text-dim);
+}
+
+.hud-slider-track {
+  width: 82%;
+  height: 10px;
+  border-radius: 5px;
+  background: var(--edge);
+  position: relative;
+}
+.hud-slider-fill {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  border-radius: 5px;
+  background: var(--accent);
+}
+
+.log-feed {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45em;
+  overflow: hidden;
+  font-size: 0.82em;
+}
+.log-feed .entry {
+  display: flex;
+  gap: 0.8em;
+}
+.log-feed .time {
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+}
+
+.task-card {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.7em 0;
+  border-bottom: 1px solid var(--edge);
+}
+.task-card:last-child {
+  border-bottom: none;
+}
+.status-pill {
+  font-size: 0.72em;
+  padding: 0.25em 0.8em;
+  border-radius: 999px;
+  border: 1px solid currentColor;
+}
+
+.page-dots {
+  display: flex;
+  gap: 1em;
+  justify-content: center;
+}

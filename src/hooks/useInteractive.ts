@@ -16,7 +16,7 @@
  * mouse. The hook warns in dev if an element registers smaller than that.
  */
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type RefObject } from "react";
 import type { Vec2 } from "../types/geometry";
 import { elementRegistry } from "../core/state/elementRegistry";
 import { pointerStateMachine } from "../core/state/pointerStateMachine";
@@ -46,7 +46,7 @@ const MIN_TARGET_PX = 80;
 
 export function useInteractive<T extends HTMLElement = HTMLDivElement>(
   opts: InteractiveOptions,
-): { ref: React.RefObject<T | null>; status: InteractiveStatus } {
+): { ref: RefObject<T | null>; status: InteractiveStatus } {
   const ref = useRef<T | null>(null);
   const [status, setStatus] = useState<InteractiveStatus>({
     hovered: false,

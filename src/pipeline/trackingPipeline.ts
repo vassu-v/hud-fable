@@ -23,7 +23,6 @@
  *    filter (no stale smoothing state) and tell the state machine.
  */
 
-import { settings } from "../config/settings";
 import type { Vec2 } from "../types/geometry";
 import type { TrackedHand } from "../types/landmarks";
 import { Camera } from "../core/camera";
@@ -69,7 +68,7 @@ export class TrackingPipeline {
   private hadPointer = false;
   private frameTimes: number[] = [];
 
-  /** Latest gesture-hand palm span (px) — the calibration hand-size step
+  /** Latest pointer-hand palm span (px) — the calibration hand-size step
    *  reads this while the user touches the bezel. */
   latestPointerSpanPx = 0;
 
@@ -200,5 +199,3 @@ export class TrackingPipeline {
   }
 }
 
-// Re-exported so UI code can size things against the same constant.
-export { settings };
