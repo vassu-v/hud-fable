@@ -46,8 +46,8 @@ const MIN_TARGET_PX = 80;
 
 export function useInteractive<T extends HTMLElement = HTMLDivElement>(
   opts: InteractiveOptions,
-): { ref: RefObject<T | null>; status: InteractiveStatus } {
-  const ref = useRef<T | null>(null);
+): { ref: RefObject<T>; status: InteractiveStatus } {
+  const ref = useRef<T>(null);
   const [status, setStatus] = useState<InteractiveStatus>({
     hovered: false,
     armed: false,
