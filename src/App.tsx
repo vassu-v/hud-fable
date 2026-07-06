@@ -22,6 +22,7 @@ import { HUD_PAGE_COUNT, HudLayout } from "./ui/hud/HudLayout";
 import { CursorLayer } from "./ui/cursor/CursorLayer";
 import { DevPanel } from "./ui/devtools/DevPanel";
 import { CalibrationScreen } from "./ui/calibration/CalibrationScreen";
+import { DebugOverlay } from "./ui/devtools/DebugOverlay";
 import { TrackingPipeline } from "./pipeline/trackingPipeline";
 import { KeyboardInput } from "./core/input/keyboardInput";
 import { mouseInput } from "./core/input/mouseInput";
@@ -31,6 +32,7 @@ import {
   loadCalibration,
   type CalibrationData,
 } from "./core/calibration/calibrationStore";
+import { settings } from "./config/settings";
 import { useHudPage } from "./hooks/usePointerState";
 
 type AppMode = "hud" | "calibrating";
@@ -42,6 +44,26 @@ export default function App() {
 
   const [mode, setMode] = useState<AppMode>("hud");
   const [trackingOn, setTrackingOn] = useState(false);
+  const [cameraOnly, setCameraOnly] = useState(false);
+  const [showDebug, setShowDebug] = useState(true);
+  const [mapping, setMapping] = useState(() => {
+    // The mapping choice survives reloads — a hard refresh silently reverting
+    // to the default made A/B testing confusing.
+    const saved = localStorage.getItem("hud-fable/cameraOnlyMapping");
+    if (saved === "position" || saved === "angular") settings.cameraOnlyMapping = saved;
+    return settings.cameraOnlyMapping;
+  });
+
+  // A/B toggle for camera-only mapping: settings is read per-frame by the
+  // pipeline, so mutating it applies instantly; recenter so the new mapping
+  // starts from the current hand pose.
+  const toggleMapping = useCallback(() => {
+    const next = settings.cameraOnlyMapping === "position" ? "angular" : "position";
+    settings.cameraOnlyMapping = next;
+    localStorage.setItem("hud-fable/cameraOnlyMapping", next);
+    setMapping(next);
+    pipeline.recenter();
+  }, [pipeline]);
   const [calibration, setCalibration] = useState<CalibrationData | null>(() =>
     loadCalibration(getActiveProfile()),
   );
@@ -83,10 +105,13 @@ export default function App() {
 
   // ---- keyboard shim (always on) -------------------------------------------
   useEffect(() => {
-    const kb = new KeyboardInput(() => void startCalibration());
+    const kb = new KeyboardInput(
+      () => void startCalibration(),
+      () => pipeline.recenter(),
+    );
     kb.start();
     return () => kb.stop();
-  }, [startCalibration]);
+  }, [startCalibration, pipeline]);
 
   // ---- mouse shim: only while hand tracking is not driving the cursor ------
   useEffect(() => {
@@ -102,8 +127,9 @@ export default function App() {
   }, []);
 
   // ---- drift monitor: slow poll while tracking with a calibration ----------
+  // Skipped in camera-only mode: there is no on-screen marker to watch.
   useEffect(() => {
-    if (!trackingOn || !calibration || mode !== "hud") return;
+    if (!trackingOn || !calibration || mode !== "hud" || cameraOnly) return;
     const monitor = new DriftMonitor(
       pipeline.camera,
       calibration.homographyScreenToImage,
@@ -115,7 +141,21 @@ export default function App() {
       if (monitor.driftDetected) setDriftWarning(true);
     }, 4000);
     return () => clearInterval(id);
-  }, [trackingOn, calibration, mode, pipeline]);
+  }, [trackingOn, calibration, mode, pipeline, cameraOnly]);
+
+  // ---- camera-only start: no marker calibration, assumed coplanar screen ---
+  const startCameraOnly = useCallback(async () => {
+    setStartError(null);
+    try {
+      await pipeline.start();
+      pipeline.useAssumedCalibration();
+      setCameraOnly(true);
+      setTrackingOn(true);
+      setMode("hud");
+    } catch (err) {
+      setStartError(`Camera failed to start: ${err instanceof Error ? err.message : err}`);
+    }
+  }, [pipeline]);
 
   const startTracking = useCallback(async () => {
     if (!calibration) {
@@ -135,6 +175,7 @@ export default function App() {
   const stopTracking = useCallback(() => {
     pipeline.stop();
     setTrackingOn(false);
+    setCameraOnly(false);
   }, [pipeline]);
 
   return (
@@ -147,13 +188,33 @@ export default function App() {
           starting the camera requires a user gesture anyway). */}
       <div style={{ position: "fixed", left: "1vw", bottom: "1.2vh", display: "flex", gap: 8, zIndex: 500 }}>
         {!trackingOn ? (
-          <button onClick={() => void startTracking()} style={{ cursor: "pointer" }}>
-            ▶ Start hand tracking{calibration ? "" : " (calibrates first)"}
-          </button>
+          <>
+            <button onClick={() => void startCameraOnly()} style={{ cursor: "pointer" }}>
+              ▶ Start (camera-only, no calibration)
+            </button>
+            <button onClick={() => void startTracking()} style={{ cursor: "pointer" }}>
+              ▶ Start hand tracking{calibration ? "" : " (calibrates first)"}
+            </button>
+          </>
         ) : (
-          <button onClick={stopTracking} style={{ cursor: "pointer" }}>
-            ⏸ Stop tracking
-          </button>
+          <>
+            <button onClick={stopTracking} style={{ cursor: "pointer" }}>
+              ⏸ Stop tracking{cameraOnly ? " (camera-only)" : ""}
+            </button>
+            {cameraOnly && (
+              <>
+                <button onClick={() => pipeline.recenter()} style={{ cursor: "pointer" }}>
+                  ⊕ Recenter aim (R)
+                </button>
+                <button onClick={toggleMapping} style={{ cursor: "pointer" }}>
+                  ⇄ Mapping: {mapping}
+                </button>
+              </>
+            )}
+            <button onClick={() => setShowDebug((v) => !v)} style={{ cursor: "pointer" }}>
+              {showDebug ? "Hide" : "Show"} debug
+            </button>
+          </>
         )}
       </div>
 
@@ -171,8 +232,11 @@ export default function App() {
       )}
 
       {/* The persistent bright disc the drift monitor watches. Only shown
-          while tracking (it means nothing to a mouse-driven session). */}
-      {trackingOn && <div className="drift-marker" />}
+          while tracking with a real marker calibration (it means nothing to a
+          mouse-driven or camera-only session). */}
+      {trackingOn && !cameraOnly && <div className="drift-marker" />}
+
+      {trackingOn && showDebug && <DebugOverlay pipeline={pipeline} />}
 
       {mode === "calibrating" && (
         <CalibrationScreen

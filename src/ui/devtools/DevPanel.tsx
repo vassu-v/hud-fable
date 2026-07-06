@@ -71,6 +71,46 @@ const SLIDERS: SliderSpec[] = [
     step: 50,
   },
   {
+    label: "Angular range X (deg to edge)",
+    get: () => settings.angular.rangeXDeg,
+    set: (v) => (settings.angular.rangeXDeg = v),
+    min: 5,
+    max: 80,
+    step: 1,
+  },
+  {
+    label: "Angular range Y (deg to edge)",
+    get: () => settings.angular.rangeYDeg,
+    set: (v) => (settings.angular.rangeYDeg = v),
+    min: 5,
+    max: 60,
+    step: 1,
+  },
+  {
+    label: "Angular expo (1=linear)",
+    get: () => settings.angular.expo,
+    set: (v) => (settings.angular.expo = v),
+    min: 1,
+    max: 3,
+    step: 0.1,
+  },
+  {
+    label: "Position box half-width",
+    get: () => settings.positionBox.halfX,
+    set: (v) => (settings.positionBox.halfX = v),
+    min: 0.05,
+    max: 0.45,
+    step: 0.01,
+  },
+  {
+    label: "Position box half-height",
+    get: () => settings.positionBox.halfY,
+    set: (v) => (settings.positionBox.halfY = v),
+    min: 0.05,
+    max: 0.4,
+    step: 0.01,
+  },
+  {
     label: "Pinch close ratio",
     get: () => settings.gestures.pinchCloseRatio,
     set: (v) => (settings.gestures.pinchCloseRatio = v),
@@ -166,6 +206,22 @@ export function DevPanel({
             rerender();
           }}
         />
+      </div>
+
+      <div className="row" style={{ marginTop: "0.8em" }}>
+        <span>angular aim bone</span>
+        <select
+          value={settings.angular.aimBone}
+          onChange={(e) => {
+            settings.angular.aimBone = e.target.value as typeof settings.angular.aimBone;
+            pipeline.recenter();
+            rerender();
+          }}
+        >
+          <option value="proximal">proximal (knuckle→joint)</option>
+          <option value="fingertip">fingertip (knuckle→tip)</option>
+          <option value="metacarpal">metacarpal (wrist→knuckle)</option>
+        </select>
       </div>
 
       <div className="row" style={{ marginTop: "0.8em" }}>

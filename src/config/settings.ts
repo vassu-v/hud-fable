@@ -30,6 +30,11 @@ export interface Settings {
     lostHandGraceMs: number;
     /** Swap roles for left-handed users (left aims, right gestures). */
     leftHandedMode: boolean;
+    /** Invert MediaPipe's Left/Right labels. Whether raw webcam frames need
+     *  this varies by camera/driver (some mirror in hardware). Empirical test:
+     *  raise your RIGHT hand — the debug overlay must paint it CYAN. If it's
+     *  magenta, flip this. Default false (correct for this laptop's webcam). */
+    flipHandedness: boolean;
   };
 
   ray: {
@@ -108,6 +113,82 @@ export interface Settings {
      *  the camera is uncalibrated. Typical laptop webcams: 55–70°. */
     assumedHfovDeg: number;
   };
+
+  /**
+   * Camera-only mode (no corner-marker calibration). The laptop webcam is
+   * embedded in the screen bezel, so the camera and screen are COPLANAR: the
+   * camera sits at top-center, the screen extends downward from just below it,
+   * and the screen normal equals the camera's optical axis. That fixed
+   * geometry is assumed here instead of being recovered from markers.
+   */
+  assumedScreen: {
+    /** Physical screen size (cm). Set to your panel; defaults to a 15.6"
+     *  16:9 laptop. Only the aspect/scale matters for where the ray lands. */
+    widthCm: number;
+    heightCm: number;
+    /** How far the webcam sits ABOVE the top edge of the screen (cm). The
+     *  screen's top-left corner is placed at (-w/2, thisMargin, 0). */
+    cameraMarginTopCm: number;
+    /** A user-facing webcam yields a mirrored view: moving the hand to the
+     *  user's right moves it LEFT in the raw image. Flip the cursor's x so
+     *  control feels natural. Toggle if pointing comes out reversed. */
+    mirrorX: boolean;
+  };
+
+  /**
+   * How camera-only mode maps the hand to the cursor.
+   *
+   * 'position' (default): the index fingertip's 2D image position, mapped
+   * from a comfortable box around the recenter point to the screen. This is
+   * the ONLY mapping that is robust on a user-facing webcam: pointing at the
+   * camera foreshortens every aiming bone to nearly nothing in the image, so
+   * any direction-based mapping ends up computed from MediaPipe's noisy z —
+   * jitter on x, near-zero response on y. Fingertip (x, y) is MediaPipe's
+   * most accurate signal and involves no z at all.
+   *
+   * 'angular': yaw/pitch of the aim bone → cursor. Kept for experimentation
+   * and for future off-axis camera setups where the bone isn't foreshortened.
+   */
+  cameraOnlyMapping: "position" | "angular";
+
+  /** Position mapping: fingertip excursion (normalized image units) from the
+   *  recenter point that reaches the screen edge. Smaller = more sensitive. */
+  positionBox: {
+    halfX: number;
+    halfY: number;
+  };
+
+  /**
+   * Angular ("gyro pointer") mapping — the aim bone's yaw/pitch angles map
+   * to cursor x/y through an expo response curve. Center is set by the
+   * recenter hotkey.
+   *
+   * WHY EXPO, NOT LINEAR GAIN: the tilt range a finger can express toward an
+   * end-on camera is small, and tracking noise is a large fraction of it — a
+   * linear gain is either too twitchy to hold still or too slow to reach the
+   * edges. The expo curve (game-controller style) is sub-linear near the
+   * center (crushes jitter at rest) and accelerates toward the extremes
+   * (edges stay reachable), and the range knobs GUARANTEE the edge lands at
+   * a physically expressible angle.
+   */
+  angular: {
+    /** Which bone defines the aim in angular mode. Unlike ray-plane mode
+     *  (which favours the curl-immune metacarpal), angular pointing needs a
+     *  FINGER bone so raising/lowering the point registers as pitch.
+     *  'proximal' (index knuckle→first joint) balances vertical response
+     *  against fingertip micro-jitter; 'fingertip' has ~2× the image
+     *  footprint (better pitch resolution deep into a tilt) but more
+     *  micro-jitter. */
+    aimBone: "proximal" | "fingertip" | "metacarpal";
+    /** Yaw (degrees) from center that reaches the screen's left/right edge. */
+    rangeXDeg: number;
+    /** Pitch (degrees) from center that reaches the top/bottom edge. Smaller
+     *  than X: vertical tilt saturates earlier under foreshortening. */
+    rangeYDeg: number;
+    /** Response exponent, ≥1. 1 = linear; higher = calmer center / faster
+     *  edges. ~1.6 is a good start. */
+    expo: number;
+  };
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -119,16 +200,21 @@ export const DEFAULT_SETTINGS: Settings = {
     roleStabilizationFrames: 10,
     lostHandGraceMs: 300,
     leftHandedMode: false,
+    flipHandedness: false,
   },
   ray: {
     aimingBone: "metacarpal",
     minIncidenceAngleDeg: 10,
   },
   filter: {
-    oneEuroMinCutoff: 1.0,
+    // minCutoff lowered from 1.0 after camera-only testing: hand-at-rest
+    // drift needs stronger smoothing; beta keeps fast moves responsive.
+    oneEuroMinCutoff: 0.5,
     oneEuroBeta: 0.007,
     oneEuroDerivCutoff: 1.0,
-    deadZoneRadius: 0.0028,
+    // ~2× the original: angular-mode noise at rest is well above the old
+    // 3px-equivalent zone.
+    deadZoneRadius: 0.005,
     deadZoneDistanceScale: 1.5,
     teleportThreshold: 0.25,
     snapRadius: 0.03,
@@ -150,6 +236,30 @@ export const DEFAULT_SETTINGS: Settings = {
     stableMs: 1000,
     driftThresholdPx: 12,
     assumedHfovDeg: 62,
+  },
+  assumedScreen: {
+    widthCm: 34.5,
+    heightCm: 19.4,
+    cameraMarginTopCm: 1.0,
+    mirrorX: true,
+  },
+  cameraOnlyMapping: "position",
+  positionBox: {
+    // ~45% of the frame width of fingertip travel sweeps the full screen.
+    // Bigger box = calmer, more deliberate control (and effectively less
+    // jitter, since noise shrinks relative to the travel); smaller = flick-
+    // of-the-wrist sensitivity. Tune to taste.
+    halfX: 0.22,
+    halfY: 0.17,
+  },
+  angular: {
+    aimBone: "proximal",
+    // The COMPUTED angles run much hotter than the physical tilt (end-on
+    // foreshortening), so these are computed-angle ranges, tuned live with
+    // the dev-panel sliders (backtick), not protractor values.
+    rangeXDeg: 35,
+    rangeYDeg: 22,
+    expo: 1.6,
   },
 };
 

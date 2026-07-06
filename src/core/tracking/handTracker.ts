@@ -7,10 +7,11 @@
  *  - normalize MediaPipe's output into our TrackedHand shape
  *  - keep only the two most plausible hands if more are visible
  *
- * NOTE ON HANDEDNESS LABELS: MediaPipe reports handedness as seen from the
- * image. Our camera faces the SCREEN (it sees the back of the user's hands,
- * same orientation as an observer standing behind the user), so the labels
- * correspond to the user's actual left/right — but they still flicker
+ * NOTE ON HANDEDNESS LABELS: whether MediaPipe's Left/Right labels match the
+ * user's actual hands depends on the camera orientation AND whether the
+ * driver mirrors frames — it varies by device, so it's exposed as
+ * settings.tracking.flipHandedness rather than assumed. Empirical test: raise
+ * your right hand; the debug overlay must paint it cyan. Labels also flicker
  * occasionally, which is why roleStabilizer.ts exists. Nothing downstream
  * consumes raw labels.
  */
@@ -62,12 +63,14 @@ export class HandTracker {
     const result = this.landmarker.detectForVideo(video, timestampMs);
     const hands: TrackedHand[] = [];
 
+    const flip = settings.tracking.flipHandedness;
     for (let i = 0; i < result.landmarks.length; i++) {
       const handednessInfo = result.handedness[i]?.[0];
       if (!handednessInfo) continue;
+      const rawLeft = handednessInfo.categoryName === "Left";
       hands.push({
         landmarks: result.landmarks[i].map((lm) => ({ x: lm.x, y: lm.y, z: lm.z })),
-        handedness: handednessInfo.categoryName === "Left" ? "Left" : "Right",
+        handedness: rawLeft !== flip ? "Left" : "Right",
         handednessScore: handednessInfo.score,
       });
     }

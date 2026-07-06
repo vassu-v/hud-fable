@@ -27,14 +27,25 @@ from CDN on first tracking start, so the first run needs network access.
 1. **Mouse mode (default).** The HUD starts driven by the mouse through the
    exact same state machine hand tracking uses — everything is testable
    without a camera.
-2. **Calibrate.** Click *Start hand tracking* (or press `C`). Point the camera
+2. **Camera-only mode (laptop webcam, no calibration).** Click *Start
+   (camera-only)*. The index fingertip's 2D image position drives the cursor:
+   point at the middle of the screen and press `R` to recenter (the first
+   hand acquisition auto-centers). Moving the fingertip within a small box
+   around that center (green in the debug overlay) sweeps the full screen.
+   Ray-plane intersection is NOT used here — a webcam embedded in the screen
+   sees every aiming bone foreshortened, so direction-based pointing rides on
+   MediaPipe's noisy z; fingertip (x, y) is its most accurate signal. The
+   user-facing webcam also carries inverted MediaPipe handedness labels
+   (selfie-view models + raw frames), corrected by
+   `settings.tracking.flipHandedness`.
+3. **Calibrated mode (external camera).** Click *Start hand tracking* (or press `C`). Point the camera
    at the screen — **slightly above or beside it, at an angle** (a dead-on
    camera makes pointing vectors degenerate). The app flashes a white disc at
    each corner and detects it by difference-imaging against a black baseline
    frame, so glare and lamps cancel out. Confirm the detected outline, then
    optionally anchor depth estimation by holding your open pointing hand
    against the screen bezel.
-3. **Point.** Right hand aims (the ray comes from the wrist→index-knuckle bone
+4. **Point.** Right hand aims (the ray comes from the wrist→index-knuckle bone
    by default — finger curl does not disturb it). Hover an element, and either
    let the dwell ring complete (~800 ms) to click, or **pinch your left
    thumb+index** to commit. **Fist cancels**, **open palm held 1 s** switches
@@ -48,6 +59,7 @@ from CDN on first tracking start, so the first run needs network access.
 | `Space` (hold) | commit (click/drag whatever the ray hits) |
 | `Esc` | cancel |
 | `1`–`3` | switch HUD page |
+| `R` | recenter camera-only pointing (point at screen center first) |
 | `C` | recalibrate (you *will* bump the camera during development) |
 | `` ` `` | dev panel: filter tuning sliders, stage toggles, raw-vs-filtered trace |
 

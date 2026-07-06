@@ -7,6 +7,8 @@
  *   C             → recalibrate hotkey          — handled by the app shell,
  *                                                 exported here as a callback
  *                                                 so the shell owns the effect
+ *   R             → recenter angular aim         — camera-only mode; callback
+ *                                                 owned by the app shell too
  *
  * During development you WILL bump the camera constantly; the 5-second
  * recalibration hotkey exists for exactly that.
@@ -18,7 +20,10 @@ export class KeyboardInput {
   private active = false;
   private spaceHeld = false;
 
-  constructor(private onRecalibrate: () => void) {}
+  constructor(
+    private onRecalibrate: () => void,
+    private onRecenter: () => void = () => {},
+  ) {}
 
   private onKeyDown = (e: KeyboardEvent): void => {
     // Ignore keystrokes aimed at form fields (calibration size entry etc.).
@@ -32,6 +37,8 @@ export class KeyboardInput {
       pointerStateMachine.handleEvent({ type: "cancel" });
     } else if (e.code === "KeyC") {
       this.onRecalibrate();
+    } else if (e.code === "KeyR") {
+      this.onRecenter();
     } else if (/^Digit[1-3]$/.test(e.code)) {
       pointerStateMachine.handleEvent({ type: "mode", page: Number(e.code.slice(5)) - 1 });
     }

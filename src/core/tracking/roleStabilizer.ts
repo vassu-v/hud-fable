@@ -20,6 +20,10 @@
  *     so brief occlusions don't reset the pointer state machine.
  *  6. >2 hands (someone walks by): keep the two closest to the previously
  *     tracked wrists; multiple people are out of scope for v1.
+ *  7. Single-hand fallback: a lone hand in frame always takes the pointer
+ *     role, whatever its label says — label conventions vary by camera and
+ *     driver, and a mislabeled lone hand must never leave the system
+ *     cursorless. Labels only pick roles when BOTH hands are visible.
  */
 
 import type { HandFrame, HandRole, Handedness, TrackedHand } from "../../types/landmarks";
@@ -87,8 +91,15 @@ export class RoleStabilizer {
     // prior (rule 4).
     const leftovers = hands.filter((h) => !assigned.has(h));
     for (const h of leftovers) {
-      const wantedRole: HandRole =
+      let wantedRole: HandRole =
         h.handedness === pointerHandedness() ? "pointer" : "gesture";
+      // SINGLE-HAND FALLBACK: with only one hand in frame, the pointer role
+      // always wins. Whether MediaPipe's labels match the user's actual hands
+      // varies by camera/driver (see settings.tracking.flipHandedness) — a
+      // mislabeled lone hand must never leave the system cursorless.
+      if (hands.length === 1 && this.slotVacant("pointer", nowMs)) {
+        wantedRole = "pointer";
+      }
       if (this.slotVacant(wantedRole, nowMs)) {
         this.updateSlot(wantedRole, h, nowMs);
         assigned.add(h);

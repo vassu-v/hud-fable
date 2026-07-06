@@ -47,13 +47,16 @@ const AIM_BONES: Record<string, [number, number]> = {
   fingertip: [LM.INDEX_MCP, LM.INDEX_TIP],
 };
 
-/** Build the aiming ray from the pointer hand in absolute camera space. */
+/** Build the aiming ray from the pointer hand in absolute camera space.
+ *  `boneOverride` forces a specific aiming bone (angular mode uses a finger
+ *  bone so vertical aim is captured); otherwise settings.ray.aimingBone. */
 export function buildAimingRay(
   hand: TrackedHand,
   k: Intrinsics,
   handSize: HandSizeCalibration | null,
+  boneOverride?: keyof typeof AIM_BONES,
 ): Ray3 {
-  const [aIdx, bIdx] = AIM_BONES[settings.ray.aimingBone];
+  const [aIdx, bIdx] = AIM_BONES[boneOverride ?? settings.ray.aimingBone];
   const a = landmarkToCameraSpace(hand, aIdx, k, handSize);
   const b = landmarkToCameraSpace(hand, bIdx, k, handSize);
   return {
